@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Builder;
+﻿using System;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,7 +12,13 @@ using SimpleIdServer.Scim.Builder;
 using SimpleIdServer.Scim.Domain;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
+using Microsoft.EntityFrameworkCore;
+using SimpleIdServer.Scim.Api;
+using UseSCIM.Host.Installer;
+using UseSCIM.Host.Models;
+using UseSCIM.Host.SchemaBuilder;
 
 namespace UseSCIM.Host
 {
@@ -66,7 +73,14 @@ namespace UseSCIM.Host
                         IssuerSigningKey = oauthRsaSecurityKey
                     };
                 });
-            services.AddSIDScim().AddSchemas(CreateScimSchemas());
+
+
+            services.AddDbContext<AppDbContext>(ServiceLifetime.Scoped);
+
+            services.AddSCIM(_ =>
+            {
+                _.IgnoreUnsupportedCanonicalValues = false;
+            },CreateScimSchemas());
         }
 
         public void Configure(IApplicationBuilder app)
@@ -77,119 +91,9 @@ namespace UseSCIM.Host
 
         private List<SCIMSchema> CreateScimSchemas()
         {
-            var schemasToAdd = new List<SCIMSchema>() { SCIMConstants.StandardSchemas.GroupSchema };
-
-            schemasToAdd.AddRange(CreateUserSCIMSchema());
-
+            var schemasToAdd = new List<SCIMSchema>() { CustomSchemas.GroupSchema, CustomSchemas.CustomUserExtensionSchema, CustomSchemas.CustomUserSchema };
+            
             return schemasToAdd;
-        }
-
-        private IEnumerable<SCIMSchema> CreateUserSCIMSchema()
-        {
-            var usersSchemas = new List<SCIMSchema>();
-
-            var customUserSchema = SCIMSchemaBuilder.Create("urn:ietf:params:scim:schemas:customUser")
-                .AddStringAttribute("customClaim1")
-                .Build();
-
-            var userSchema = SCIMSchemaBuilder.Create("urn:ietf:params:scim:schemas:core:2.0:User", "User", SCIMConstants.SCIMEndpoints.User, "User Account", true)
-                    .AddStringAttribute("userName", caseExact: true, uniqueness: SCIMSchemaAttributeUniqueness.SERVER)
-                    .AddComplexAttribute("name", c =>
-                    {
-                        c.AddStringAttribute("formatted", description: "The full name");
-                        c.AddStringAttribute("familyName", description: "The family name");
-                        c.AddStringAttribute("givenName", description: "The given name");
-                        c.AddStringAttribute("middleName", description: "The middle name");
-                        c.AddStringAttribute("honorificPrefix");
-                        c.AddStringAttribute("honorificSuffix");
-                    }, description: "The components of the user's real name.")
-                    .AddStringAttribute("displayName")
-                    .AddStringAttribute("nickName")
-                    .AddStringAttribute("profileUrl")
-                    .AddStringAttribute("title")
-                    .AddStringAttribute("userType")
-                    .AddStringAttribute("preferredLanguage")
-                    .AddStringAttribute("locale")
-                    .AddStringAttribute("timezone")
-                    .AddBooleanAttribute("active")
-                    .AddStringAttribute("password")
-                    .AddComplexAttribute("emails", callback: c =>
-                    {
-                        c.AddStringAttribute("value");
-                        c.AddStringAttribute("display");
-                        c.AddStringAttribute("type");
-                        c.AddBooleanAttribute("primary");
-                    }, multiValued: true)
-                    .AddComplexAttribute("phoneNumbers", callback: c =>
-                    {
-                        c.AddStringAttribute("value");
-                        c.AddStringAttribute("display");
-                        c.AddStringAttribute("type");
-                        c.AddBooleanAttribute("primary");
-
-                    }, multiValued: true)
-                    .AddComplexAttribute("ims", callback: c =>
-                    {
-                        c.AddStringAttribute("value");
-                        c.AddStringAttribute("display");
-                        c.AddStringAttribute("type");
-                        c.AddBooleanAttribute("primary");
-                    }, multiValued: true)
-                    .AddComplexAttribute("photos", callback: c =>
-                    {
-                        c.AddStringAttribute("value");
-                        c.AddStringAttribute("display");
-                        c.AddStringAttribute("type");
-                        c.AddBooleanAttribute("primary");
-                    }, multiValued: true)
-                    .AddComplexAttribute("addresses", callback: c =>
-                    {
-                        c.AddStringAttribute("formatted");
-                        c.AddStringAttribute("streetAddress");
-                        c.AddStringAttribute("locality");
-                        c.AddStringAttribute("region");
-                        c.AddStringAttribute("postalCode");
-                        c.AddStringAttribute("country");
-                        c.AddStringAttribute("type");
-                    }, multiValued: true)
-                    .AddComplexAttribute("groups", callback: c =>
-                    {
-                        c.AddStringAttribute("value");
-                        c.AddStringAttribute("$ref");
-                        c.AddStringAttribute("display");
-                        c.AddStringAttribute("type");
-                    }, multiValued: true)
-                    .AddComplexAttribute("entitlements", callback: c =>
-                    {
-                        c.AddStringAttribute("value");
-                        c.AddStringAttribute("display");
-                        c.AddStringAttribute("type");
-                        c.AddBooleanAttribute("primary");
-                    }, multiValued: true)
-                    .AddComplexAttribute("roles", callback: c =>
-                    {
-                        c.AddStringAttribute("value");
-                        c.AddStringAttribute("display");
-                        c.AddStringAttribute("type");
-                        c.AddBooleanAttribute("primary");
-                    }, multiValued: true)
-                    .AddComplexAttribute("x509Certificates", callback: c =>
-                    {
-                        c.AddStringAttribute("value");
-                        c.AddStringAttribute("display");
-                        c.AddStringAttribute("type");
-                        c.AddBooleanAttribute("primary");
-                    }, multiValued: true)
-                    .AddComplexAttribute("groups", opt =>
-                    {
-                        opt.AddStringAttribute("value", mutability: SCIMSchemaAttributeMutabilities.READONLY);
-                    }, multiValued: true, mutability: SCIMSchemaAttributeMutabilities.READONLY)
-                    .AddSCIMSchemaExtension("urn:ietf:params:scim:schemas:customUser", false)
-                    .Build();
-
-            usersSchemas.Add(userSchema);
-            usersSchemas.Add(customUserSchema);
-            return usersSchemas;
         }
     }
 }
